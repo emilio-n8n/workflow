@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maquetteur de parcours</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <h1>Maquetteur de parcours</h1>
+        <p class="intro">
+          Ajoutez des blocs, organisez-les et reliez-les pour créer un schéma clair
+          de votre application. Exportez ensuite le JSON pour le communiquer à votre IA.
+        </p>
+
+        <section id="selection-panel" class="panel hidden">
+          <h2>Bloc sélectionné</h2>
+          <label class="field">
+            <span>Nom</span>
+            <input id="node-title" type="text" placeholder="Page d'accueil" />
+          </label>
+          <label class="field">
+            <span>Description</span>
+            <textarea id="node-description" rows="4" placeholder="Détails supplémentaires"></textarea>
+          </label>
+          <button id="delete-node" class="button danger">Supprimer ce bloc</button>
+        </section>
+
+        <section class="panel">
+          <h2>Export JSON</h2>
+          <button id="copy-json" class="button primary">Copier dans le presse-papiers</button>
+          <textarea id="json-preview" readonly rows="10"></textarea>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button id="add-node" class="button primary">Ajouter un bloc</button>
+            <button id="link-mode" class="button">Mode connexion</button>
+          </div>
+          <div id="link-hint" class="hint"></div>
+        </div>
+
+        <div class="canvas-wrapper">
+          <svg id="connections"></svg>
+          <div id="canvas"></div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
