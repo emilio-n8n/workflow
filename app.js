@@ -21,6 +21,8 @@ const elements = {
   nodeTitle: document.getElementById("node-title"),
   nodeDescription: document.getElementById("node-description"),
   deleteNode: document.getElementById("delete-node"),
+  importJson: document.getElementById("import-json"),
+  importFileInput: document.getElementById("import-file-input"),
 };
 
 const nodeElements = new Map();
@@ -59,6 +61,8 @@ function attachEventListeners() {
   elements.addNode.addEventListener("click", addNode);
   elements.linkMode.addEventListener("click", toggleLinkMode);
   elements.copyJson.addEventListener("click", copyJSONToClipboard);
+  elements.importJson.addEventListener("click", () => elements.importFileInput.click());
+  elements.importFileInput.addEventListener("change", handleJsonImport);
 
   elements.nodeTitle.addEventListener("input", (event) => {
     const node = getSelectedNode();
@@ -482,6 +486,82 @@ function createId(prefix) {
     return `${prefix}-${crypto.randomUUID()}`;
   }
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}-${Date.now()}`;
+}
+
+function handleJsonImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (validateImportData(data)) {
+        loadState(data);
+      } else {
+        alert("Le fichier JSON est invalide ou mal formaté.");
+      }
+    } catch (error) {
+      alert("Erreur lors de la lecture du fichier JSON.");
+      console.error(error);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = "";
+}
+
+function validateImportData(data) {
+  return (
+    data &&
+    Array.isArray(data.nodes) &&
+    Array.isArray(data.edges) &&
+    data.nodes.every(
+      (n) =>
+        n.id &&
+        n.title &&
+        n.position &&
+        typeof n.position.x === "number" &&
+        typeof n.position.y === "number"
+    ) &&
+    data.edges.every((e) => e.from && e.to)
+  );
+}
+
+function loadState(data) {
+  // Clear current state
+  state.nodes.forEach((node) => {
+    const el = nodeElements.get(node.id);
+    if (el) el.remove();
+  });
+  state.edges.forEach((edge) => {
+    const el = edgeElements.get(edgeIdentifier(edge.from, edge.to));
+    if (el) el.remove();
+  });
+  nodeElements.clear();
+  edgeElements.clear();
+
+  state.nodes = data.nodes.map(node => ({ ...node, x: node.position.x, y: node.position.y }));
+  state.edges = data.edges;
+
+  // Re-render canvas
+  state.nodes.forEach((node) => {
+    const element = createNodeElement(node);
+    nodeElements.set(node.id, element);
+    elements.canvas.appendChild(element);
+  });
+
+  state.edges.forEach((edge) => {
+    const edgeId = edgeIdentifier(edge.from, edge.to);
+    const path = document.createElementNS(svgNS, "path");
+    path.classList.add("connection-line");
+    path.dataset.edgeId = edgeId;
+    edgesGroup.appendChild(path);
+    edgeElements.set(edgeId, path);
+  });
+
+  selectNode(null);
+  updateConnections();
+  updateJSONPreview();
 }
 
 function startConnectorDrag(event, nodeId, connectorElement) {

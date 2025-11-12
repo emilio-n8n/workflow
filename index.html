@@ -29,9 +29,13 @@
         </section>
 
         <section class="panel">
-          <h2>Export JSON</h2>
-          <button id="copy-json" class="button primary">Copier dans le presse-papiers</button>
-          <textarea id="json-preview" readonly rows="10"></textarea>
+          <h2>Importer / Exporter</h2>
+          <div class="button-group">
+            <button id="import-json" class="button">Importer JSON</button>
+            <button id="copy-json" class="button primary">Copier JSON</button>
+          </div>
+          <input type="file" id="import-file-input" accept=".json,application/json" class="hidden">
+          <textarea id="json-preview" readonly rows="8"></textarea>
         </section>
       </aside>
 
