@@ -169,7 +169,7 @@ async function handleAIGeneration() {
 
   // Check if user wants to generate a flow (heuristic)
   const isGenerationRequest = /cré|génèr|fais|flow|parcours/i.test(prompt);
-  
+
   await callGemini(prompt, true); // Always include context for now
 }
 
@@ -184,7 +184,7 @@ async function callGemini(userPrompt, includeContext = false) {
 
   try {
     const currentJson = JSON.stringify({ nodes: state.nodes, edges: state.edges });
-    
+
     const systemInstruction = `
       Tu es FlowGenius, un architecte UX expert.
       Ton rôle est d'aider l'utilisateur à concevoir des flux d'application.
@@ -203,7 +203,7 @@ async function callGemini(userPrompt, includeContext = false) {
       3. Contexte actuel du graphe : ${currentJson}
     `;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=${state.apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -214,7 +214,7 @@ async function callGemini(userPrompt, includeContext = false) {
     });
 
     const data = await response.json();
-    
+
     if (data.error) {
       throw new Error(data.error.message);
     }
@@ -227,7 +227,7 @@ async function callGemini(userPrompt, includeContext = false) {
       // Clean up potential markdown code blocks if Gemini adds them despite instructions
       const cleanText = aiText.replace(/```json/g, "").replace(/```/g, "").trim();
       const jsonResponse = JSON.parse(cleanText);
-      
+
       if (validateImportData(jsonResponse)) {
         loadState(jsonResponse);
         addChatMessage("ai", "J'ai généré le flux demandé. Vous pouvez maintenant le modifier.");
