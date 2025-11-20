@@ -237,17 +237,28 @@ async function callGemini(userPrompt, includeContext = false) {
     // Try to parse JSON
     try {
       // Clean up potential markdown code blocks if Gemini adds them despite instructions
-      const cleanText = aiText.replace(/```json/g, "").replace(/```/g, "").trim();
+      let cleanText = aiText.trim();
+
+      // Remove markdown code blocks
+      cleanText = cleanText.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+
+      // Try to find JSON object in the text
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanText = jsonMatch[0];
+      }
+
       const jsonResponse = JSON.parse(cleanText);
 
       if (validateImportData(jsonResponse)) {
         loadState(jsonResponse);
-        addChatMessage("ai", "J'ai généré le flux demandé. Vous pouvez maintenant le modifier.");
+        addChatMessage("ai", "✅ Flux généré avec succès ! Vous pouvez maintenant le modifier.");
       } else {
-        // It was JSON but not our schema? Treat as text.
-        addChatMessage("ai", aiText);
+        console.error("Invalid JSON structure:", jsonResponse);
+        addChatMessage("ai", "⚠️ Le JSON généré n'est pas au bon format. Voici la réponse :\n\n" + aiText);
       }
     } catch (e) {
+      console.error("JSON parse error:", e, "Text:", aiText);
       // Not JSON, treat as text response
       addChatMessage("ai", aiText);
     }
@@ -633,12 +644,12 @@ function validateImportData(data) {
     Array.isArray(data.nodes) &&
     Array.isArray(data.edges) &&
     data.nodes.every(
-      (n) =>
-        n.id &&
-        n.title &&
-        n.position &&
-        typeof n.position.x === "number" &&
-        typeof n.position.y === "number"
+      (n) => {
+        // Accept both formats: {position: {x, y}} or {x, y}
+        const hasPosition = n.position && typeof n.position.x === "number" && typeof n.position.y === "number";
+        const hasDirectXY = typeof n.x === "number" && typeof n.y === "number";
+        return n.id && n.title && (hasPosition || hasDirectXY);
+      }
     ) &&
     data.edges.every((e) => e.from && e.to)
   );
@@ -657,7 +668,11 @@ function loadState(data) {
   nodeElements.clear();
   edgeElements.clear();
 
-  state.nodes = data.nodes.map(node => ({ ...node, x: node.position.x, y: node.position.y }));
+  state.nodes = data.nodes.map(node => ({
+    ...node,
+    x: node.position ? node.position.x : node.x,
+    y: node.position ? node.position.y : node.y
+  }));
   state.edges = data.edges;
 
   // Re-render canvas
