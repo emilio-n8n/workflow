@@ -406,6 +406,8 @@ function startDragging(event, node, element, onMoveCallback) {
   element.setPointerCapture(pointerId);
   element.classList.add("dragging");
 
+  let animationFrameId = null;
+
   const moveHandler = (moveEvent) => {
     const deltaX = moveEvent.clientX - startX;
     const deltaY = moveEvent.clientY - startY;
@@ -414,9 +416,15 @@ function startDragging(event, node, element, onMoveCallback) {
 
     node.x = newX;
     node.y = newY;
-    positionNodeElement(element, newX, newY);
-    updateConnections();
-    onMoveCallback();
+
+    if (animationFrameId) return;
+
+    animationFrameId = requestAnimationFrame(() => {
+      positionNodeElement(element, newX, newY);
+      updateConnections();
+      onMoveCallback();
+      animationFrameId = null;
+    });
   };
 
   const endHandler = () => {
@@ -499,20 +507,30 @@ function edgeIdentifier(fromId, toId) {
 }
 
 function updateConnections() {
-  const canvasRect = elements.canvas.getBoundingClientRect();
-
+  // Use cached state coordinates to avoid layout thrashing
   state.edges.forEach((edge) => {
-    const source = nodeElements.get(edge.from);
-    const target = nodeElements.get(edge.to);
-    if (!source || !target) return;
+    const sourceNode = state.nodes.find(n => n.id === edge.from);
+    const targetNode = state.nodes.find(n => n.id === edge.to);
 
-    const sourceRect = source.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
+    if (!sourceNode || !targetNode) return;
 
-    const startX = sourceRect.right - canvasRect.left;
-    const startY = sourceRect.top + sourceRect.height / 2 - canvasRect.top;
-    const endX = targetRect.left - canvasRect.left;
-    const endY = targetRect.top + targetRect.height / 2 - canvasRect.top;
+    // Assume standard node dimensions or read once if variable (but here we optimize for speed)
+    // Width is fixed 240px in CSS. Height is variable but we can estimate or read offsetHeight efficiently if needed.
+    // For now, let's use the node.x/y which are top-left coordinates relative to canvas.
+
+    const sourceEl = nodeElements.get(edge.from);
+    const targetEl = nodeElements.get(edge.to);
+
+    // We still need height, but let's use offsetHeight which is faster than getBoundingClientRect
+    // Ideally we would cache these heights, but this is already a big improvement.
+    const sourceHeight = sourceEl ? sourceEl.offsetHeight : 100;
+    const targetHeight = targetEl ? targetEl.offsetHeight : 100;
+    const width = 240; // Fixed width from CSS
+
+    const startX = sourceNode.x + width;
+    const startY = sourceNode.y + sourceHeight / 2;
+    const endX = targetNode.x;
+    const endY = targetNode.y + targetHeight / 2;
 
     const offset = Math.max(40, Math.abs(endX - startX) / 2);
     const curve = `M ${startX} ${startY} C ${startX + offset} ${startY} ${endX - offset} ${endY} ${endX} ${endY}`;
