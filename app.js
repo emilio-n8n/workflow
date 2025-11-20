@@ -215,11 +215,23 @@ async function callGemini(userPrompt, includeContext = false) {
 
     const data = await response.json();
 
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error("Limite de requêtes atteinte. Veuillez patienter quelques minutes avant de réessayer.");
+      }
+      throw new Error(data.error?.message || `Erreur API (${response.status})`);
+    }
+
     if (data.error) {
       throw new Error(data.error.message);
     }
 
-    const aiText = data.candidates[0].content.parts[0].text;
+    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!aiText) {
+      throw new Error("Réponse vide de l'IA. Veuillez réessayer.");
+    }
+
     loadingMsg.remove();
 
     // Try to parse JSON
