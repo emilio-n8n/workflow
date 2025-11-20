@@ -7,6 +7,7 @@ const state = {
   linkMode: false,
   pendingLinkFrom: null,
   draggingLink: null,
+  apiKey: localStorage.getItem("gemini_api_key") || "",
 };
 
 const elements = {
@@ -23,6 +24,17 @@ const elements = {
   deleteNode: document.getElementById("delete-node"),
   importJson: document.getElementById("import-json"),
   importFileInput: document.getElementById("import-file-input"),
+  // AI & Settings Elements
+  settingsBtn: document.getElementById("settings-btn"),
+  settingsModal: document.getElementById("settings-modal"),
+  closeSettings: document.getElementById("close-settings"),
+  saveSettings: document.getElementById("save-settings"),
+  apiKeyInput: document.getElementById("api-key-input"),
+  aiPrompt: document.getElementById("ai-prompt"),
+  aiGenerateBtn: document.getElementById("ai-generate-btn"),
+  aiChatContainer: document.getElementById("ai-chat-container"),
+  aiAnalyzeBtn: document.getElementById("ai-analyze-btn"),
+  aiSuggestBtn: document.getElementById("ai-suggest-btn"),
 };
 
 const nodeElements = new Map();
@@ -31,11 +43,14 @@ const edgeElements = new Map();
 const edgesGroup = document.createElementNS(svgNS, "g");
 edgesGroup.setAttribute("data-role", "edges");
 
-toastCopyFeedback();
+// Initialize
 setupSvg();
 attachEventListeners();
 updateLinkHint();
 updateJSONPreview();
+if (state.apiKey) {
+  elements.apiKeyInput.value = state.apiKey;
+}
 
 function setupSvg() {
   const defs = document.createElementNS(svgNS, "defs");
@@ -50,6 +65,7 @@ function setupSvg() {
 
   const path = document.createElementNS(svgNS, "path");
   path.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+  // The fill is now handled by CSS or inherited, but we can set a default class
   marker.appendChild(path);
   defs.appendChild(marker);
 
@@ -58,6 +74,7 @@ function setupSvg() {
 }
 
 function attachEventListeners() {
+  // Core App Listeners
   elements.addNode.addEventListener("click", addNode);
   elements.linkMode.addEventListener("click", toggleLinkMode);
   elements.copyJson.addEventListener("click", copyJSONToClipboard);
@@ -101,34 +118,164 @@ function attachEventListeners() {
   });
 
   window.addEventListener("resize", debounce(updateConnections, 100));
+
+  // Settings Listeners
+  elements.settingsBtn.addEventListener("click", () => {
+    elements.settingsModal.classList.remove("hidden");
+  });
+
+  elements.closeSettings.addEventListener("click", () => {
+    elements.settingsModal.classList.add("hidden");
+  });
+
+  elements.saveSettings.addEventListener("click", () => {
+    const key = elements.apiKeyInput.value.trim();
+    if (key) {
+      state.apiKey = key;
+      localStorage.setItem("gemini_api_key", key);
+      elements.settingsModal.classList.add("hidden");
+      addChatMessage("system", "Clé API enregistrée avec succès !");
+    }
+  });
+
+  // AI Listeners
+  elements.aiGenerateBtn.addEventListener("click", handleAIGeneration);
+  elements.aiPrompt.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAIGeneration();
+    }
+  });
+
+  elements.aiAnalyzeBtn.addEventListener("click", () => {
+    const prompt = "Analyse ce flux utilisateur. Identifie les points de friction potentiels, les étapes manquantes ou les incohérences. Sois concis.";
+    callGemini(prompt, true);
+  });
+
+  elements.aiSuggestBtn.addEventListener("click", () => {
+    const prompt = "Suggère 3 étapes supplémentaires logiques pour ce flux. Réponds sous forme de liste.";
+    callGemini(prompt, true);
+  });
 }
 
-function toastCopyFeedback() {
-  let timeoutId;
+// --- AI Logic ---
 
-  elements.copyJson.addEventListener("click", () => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
+async function handleAIGeneration() {
+  const prompt = elements.aiPrompt.value.trim();
+  if (!prompt) return;
+
+  elements.aiPrompt.value = "";
+  addChatMessage("user", prompt);
+
+  // Check if user wants to generate a flow (heuristic)
+  const isGenerationRequest = /cré|génèr|fais|flow|parcours/i.test(prompt);
+  
+  await callGemini(prompt, true); // Always include context for now
+}
+
+async function callGemini(userPrompt, includeContext = false) {
+  if (!state.apiKey) {
+    addChatMessage("system", "Veuillez d'abord configurer votre clé API Gemini dans les paramètres.");
+    return;
+  }
+
+  addChatMessage("ai", "Réflexion en cours...");
+  const loadingMsg = elements.aiChatContainer.lastElementChild;
+
+  try {
+    const currentJson = JSON.stringify({ nodes: state.nodes, edges: state.edges });
+    
+    const systemInstruction = `
+      Tu es FlowGenius, un architecte UX expert.
+      Ton rôle est d'aider l'utilisateur à concevoir des flux d'application.
+      
+      RÈGLES IMPORTANTES :
+      1. Si l'utilisateur demande de CRÉER ou GÉNÉRER un flux, tu DOIS répondre UNIQUEMENT avec un objet JSON valide.
+         Le JSON doit avoir cette structure :
+         {
+           "nodes": [ { "id": "unique_id", "title": "Titre", "description": "Desc", "x": 100, "y": 100 } ],
+           "edges": [ { "from": "id1", "to": "id2" } ]
+         }
+         Ne mets pas de markdown (pas de \`\`\`json). Juste le JSON brut.
+      
+      2. Si l'utilisateur demande une ANALYSE ou des CONSEILS, réponds en texte clair, concis et professionnel.
+      
+      3. Contexte actuel du graphe : ${currentJson}
+    `;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: systemInstruction + "\n\nUtilisateur: " + userPrompt }]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error.message);
     }
 
-    elements.copyJson.dataset.feedback = "pending";
-    timeoutId = window.setTimeout(() => {
-      elements.copyJson.dataset.feedback = "";
-    }, 1800);
+    const aiText = data.candidates[0].content.parts[0].text;
+    loadingMsg.remove();
+
+    // Try to parse JSON
+    try {
+      // Clean up potential markdown code blocks if Gemini adds them despite instructions
+      const cleanText = aiText.replace(/```json/g, "").replace(/```/g, "").trim();
+      const jsonResponse = JSON.parse(cleanText);
+      
+      if (validateImportData(jsonResponse)) {
+        loadState(jsonResponse);
+        addChatMessage("ai", "J'ai généré le flux demandé. Vous pouvez maintenant le modifier.");
+      } else {
+        // It was JSON but not our schema? Treat as text.
+        addChatMessage("ai", aiText);
+      }
+    } catch (e) {
+      // Not JSON, treat as text response
+      addChatMessage("ai", aiText);
+    }
+
+  } catch (error) {
+    loadingMsg.remove();
+    addChatMessage("system", "Erreur : " + error.message);
+  }
+}
+
+function addChatMessage(type, text) {
+  const div = document.createElement("div");
+  div.className = `chat-message ${type}`;
+  div.textContent = text;
+  elements.aiChatContainer.appendChild(div);
+  elements.aiChatContainer.scrollTop = elements.aiChatContainer.scrollHeight;
+}
+
+// --- Core Logic (Existing + Adapted) ---
+
+function copyJSONToClipboard(event) {
+  const payload = elements.jsonPreview.value;
+  if (!payload) return;
+  navigator.clipboard.writeText(payload).then(() => {
+    const originalText = event.currentTarget.textContent;
+    event.currentTarget.textContent = "Copié !";
+    setTimeout(() => event.currentTarget.textContent = originalText, 2000);
   });
 }
 
 function addNode() {
   const node = {
     id: createId("node"),
-    title: `Bloc ${state.nodes.length + 1}`,
+    title: `Page ${state.nodes.length + 1}`,
     description: "",
-    x: 140 + state.nodes.length * 18,
-    y: 140 + state.nodes.length * 24,
+    x: 100 + Math.random() * 50,
+    y: 100 + Math.random() * 50,
   };
 
   state.nodes.push(node);
-
   const element = createNodeElement(node);
   nodeElements.set(node.id, element);
   elements.canvas.appendChild(element);
@@ -269,7 +416,7 @@ function handleLinking(targetNodeId) {
   if (!state.pendingLinkFrom) {
     state.pendingLinkFrom = targetNodeId;
     const element = nodeElements.get(targetNodeId);
-    element?.classList.add("link-source");
+    element?.classList.add("link-source"); // Add visual cue if needed
     updateLinkHint();
     return;
   }
@@ -290,14 +437,13 @@ function handleLinking(targetNodeId) {
 
 function clearPendingLink() {
   if (!state.pendingLinkFrom) return;
-  const element = nodeElements.get(state.pendingLinkFrom);
-  element?.classList.remove("link-source");
+  // Remove visual cue if added
   state.pendingLinkFrom = null;
 }
 
 function toggleLinkMode() {
   state.linkMode = !state.linkMode;
-  elements.linkMode.classList.toggle("active", state.linkMode);
+  elements.linkMode.classList.toggle("active", state.linkMode); // Add active style if needed
 
   if (!state.linkMode) {
     clearPendingLink();
@@ -409,54 +555,13 @@ function updateLinkHint() {
     if (state.pendingLinkFrom) {
       const node = state.nodes.find((item) => item.id === state.pendingLinkFrom);
       const name = node?.title || "ce bloc";
-      elements.linkHint.textContent = `Choisissez le bloc de destination pour relier "${name}".`;
+      elements.linkHint.textContent = `Relier "${name}" à...`;
     } else {
-      elements.linkHint.textContent = "Cliquez sur un bloc source, puis un bloc cible pour créer une connexion.";
+      elements.linkHint.textContent = "Sélectionnez la source puis la cible";
     }
   } else {
-    elements.linkHint.textContent =
-      "Ajoutez des blocs, déplacez-les librement et utilisez le connecteur bleu pour tirer une connexion.";
+    elements.linkHint.textContent = "";
   }
-}
-
-function copyJSONToClipboard(event) {
-  const payload = elements.jsonPreview.value;
-  if (!payload) return;
-
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard
-      .writeText(payload)
-      .then(() => {
-        showCopyFeedback(event.currentTarget);
-      })
-      .catch(() => {
-        fallbackCopy(payload, event.currentTarget);
-      });
-  } else {
-    fallbackCopy(payload, event.currentTarget);
-  }
-}
-
-function showCopyFeedback(button) {
-  button.textContent = "Copié !";
-  button.disabled = true;
-  window.setTimeout(() => {
-    button.textContent = "Copier dans le presse-papiers";
-    button.disabled = false;
-  }, 1200);
-}
-
-function fallbackCopy(text, button) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "absolute";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
-  showCopyFeedback(button);
 }
 
 function updateJSONPreview() {

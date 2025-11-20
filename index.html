@@ -3,47 +3,105 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Maquetteur de parcours</title>
+    <title>FlowGenius AI - Maquetteur Intelligent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app">
-      <aside class="sidebar">
-        <h1>Maquetteur de parcours</h1>
-        <p class="intro">
-          Ajoutez des blocs, organisez-les et reliez-les pour créer un schéma clair
-          de votre application. Exportez ensuite le JSON pour le communiquer à votre IA.
-        </p>
+      <!-- Background Effects -->
+      <div class="bg-glow"></div>
+      <div class="bg-grid"></div>
 
-        <section id="selection-panel" class="panel hidden">
-          <h2>Bloc sélectionné</h2>
-          <label class="field">
-            <span>Nom</span>
-            <input id="node-title" type="text" placeholder="Page d'accueil" />
-          </label>
-          <label class="field">
-            <span>Description</span>
-            <textarea id="node-description" rows="4" placeholder="Détails supplémentaires"></textarea>
-          </label>
-          <button id="delete-node" class="button danger">Supprimer ce bloc</button>
-        </section>
-
-        <section class="panel">
-          <h2>Importer / Exporter</h2>
-          <div class="button-group">
-            <button id="import-json" class="button">Importer JSON</button>
-            <button id="copy-json" class="button primary">Copier JSON</button>
+      <aside class="sidebar glass-panel">
+        <header class="sidebar-header">
+          <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <h1>FlowGenius AI</h1>
           </div>
-          <input type="file" id="import-file-input" accept=".json,application/json" class="hidden">
-          <textarea id="json-preview" readonly rows="8"></textarea>
-        </section>
+          <button id="settings-btn" class="icon-button" title="Paramètres API">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+            </svg>
+          </button>
+        </header>
+
+        <div class="sidebar-content">
+          <!-- AI Section -->
+          <section class="panel ai-panel">
+            <div class="panel-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2a10 10 0 1 0 10 10H12V2Z"/>
+                <path d="M12 12L2.1 12.5"/>
+                <path d="M12 12V21.9"/>
+              </svg>
+              <h2>Assistant IA</h2>
+            </div>
+            <div class="ai-content">
+              <div id="ai-chat-container" class="chat-container">
+                <div class="chat-message system">
+                  Bonjour ! Je suis votre architecte IA. Configurez votre clé API pour commencer.
+                </div>
+              </div>
+              <div class="ai-input-area">
+                <textarea id="ai-prompt" rows="2" placeholder="Décrivez un flux (ex: Login)..."></textarea>
+                <button id="ai-generate-btn" class="button ai-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                    <path d="M21 3v5h-5"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="ai-actions">
+                <button id="ai-analyze-btn" class="button small-btn">Analyser le flux</button>
+                <button id="ai-suggest-btn" class="button small-btn">Suggérer la suite</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="selection-panel" class="panel hidden">
+            <h2>Bloc sélectionné</h2>
+            <label class="field">
+              <span>Nom</span>
+              <input id="node-title" type="text" placeholder="Page d'accueil" />
+            </label>
+            <label class="field">
+              <span>Description</span>
+              <textarea id="node-description" rows="3" placeholder="Détails supplémentaires"></textarea>
+            </label>
+            <button id="delete-node" class="button danger">Supprimer ce bloc</button>
+          </section>
+
+          <section class="panel">
+            <h2>Données</h2>
+            <div class="button-group">
+              <button id="import-json" class="button">Importer</button>
+              <button id="copy-json" class="button primary">Copier JSON</button>
+            </div>
+            <input type="file" id="import-file-input" accept=".json,application/json" class="hidden">
+            <textarea id="json-preview" readonly rows="4"></textarea>
+          </section>
+        </div>
       </aside>
 
       <main class="workspace">
-        <div class="toolbar">
+        <div class="toolbar glass-panel">
           <div class="toolbar-actions">
-            <button id="add-node" class="button primary">Ajouter un bloc</button>
-            <button id="link-mode" class="button">Mode connexion</button>
+            <button id="add-node" class="button primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Ajouter un bloc
+            </button>
+            <button id="link-mode" class="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+              Lier
+            </button>
           </div>
           <div id="link-hint" class="hint"></div>
         </div>
@@ -53,6 +111,26 @@
           <div id="canvas"></div>
         </div>
       </main>
+
+      <!-- Settings Modal -->
+      <div id="settings-modal" class="modal hidden">
+        <div class="modal-content glass-panel">
+          <div class="modal-header">
+            <h2>Configuration IA</h2>
+            <button id="close-settings" class="icon-button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <label class="field">
+              <span>Clé API Gemini</span>
+              <input id="api-key-input" type="password" placeholder="AIzaSy..." />
+              <p class="help-text">Votre clé est stockée localement dans votre navigateur.</p>
+            </label>
+            <button id="save-settings" class="button primary full-width">Enregistrer</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="app.js"></script>
