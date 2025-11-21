@@ -10,13 +10,20 @@ const state = {
   apiKey: localStorage.getItem("gemini_api_key") || "",
   conversationHistory: [], // Stores all messages for context
   flowModificationHistory: [], // Tracks chronological flow changes
+  // View State
+  view: { scale: 1, x: 0, y: 0 },
+  panMode: false,
+  isPanning: false,
 };
 
 const elements = {
+  canvasWrapper: document.getElementById("canvas-wrapper"),
+  transformLayer: document.getElementById("transform-layer"),
   canvas: document.getElementById("canvas"),
   svg: document.getElementById("connections"),
   addNode: document.getElementById("add-node"),
   linkMode: document.getElementById("link-mode"),
+  panMode: document.getElementById("pan-mode"),
   linkHint: document.getElementById("link-hint"),
   jsonPreview: document.getElementById("json-preview"),
   copyJson: document.getElementById("copy-json"),
@@ -85,9 +92,18 @@ function attachEventListeners() {
   // Core App Listeners
   elements.addNode.addEventListener("click", addNode);
   elements.linkMode.addEventListener("click", toggleLinkMode);
+  elements.panMode.addEventListener("click", togglePanMode);
   elements.copyJson.addEventListener("click", copyJSONToClipboard);
   elements.importJson.addEventListener("click", () => elements.importFileInput.click());
   elements.importFileInput.addEventListener("change", handleJsonImport);
+
+  // Zoom Listener
+  elements.canvasWrapper.addEventListener("wheel", handleWheel, { passive: false });
+
+  // Pan Listeners
+  elements.canvasWrapper.addEventListener("pointerdown", handlePanStart);
+  window.addEventListener("pointermove", handlePanMove);
+  window.addEventListener("pointerup", handlePanEnd);
 
   elements.nodeTitle.addEventListener("input", (event) => {
     const node = getSelectedNode();
@@ -111,17 +127,13 @@ function attachEventListeners() {
     }
   });
 
-  elements.canvas.addEventListener("click", (event) => {
-    if (event.target === elements.canvas) {
-      clearPendingLink();
-      selectNode(null);
-    }
-  });
-
-  elements.svg.addEventListener("click", (event) => {
-    if (event.target === elements.svg) {
-      clearPendingLink();
-      selectNode(null);
+  // Click on background to deselect
+  elements.canvasWrapper.addEventListener("click", (event) => {
+    if (event.target === elements.canvasWrapper || event.target === elements.transformLayer || event.target === elements.canvas || event.target === elements.svg) {
+      if (!state.isPanning) {
+        clearPendingLink();
+        selectNode(null);
+      }
     }
   });
 
@@ -356,12 +368,20 @@ function copyJSONToClipboard(event) {
 }
 
 function addNode() {
+  const rect = elements.canvasWrapper.getBoundingClientRect();
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
+
+  // Convert screen center to world coordinates
+  const worldX = (centerX - state.view.x) / state.view.scale;
+  const worldY = (centerY - state.view.y) / state.view.scale;
+
   const node = {
     id: createId("node"),
     title: `Page ${state.nodes.length + 1}`,
     description: "",
-    x: 100 + Math.random() * 50,
-    y: 100 + Math.random() * 50,
+    x: worldX - 120 + (Math.random() * 40 - 20), // Center horizontally (width 240)
+    y: worldY - 50 + (Math.random() * 40 - 20),  // Center vertically (height ~100)
   };
 
   state.nodes.push(node);
@@ -491,8 +511,8 @@ function startDragging(event, node, element, onMoveCallback) {
   let animationFrameId = null;
 
   const moveHandler = (moveEvent) => {
-    const deltaX = moveEvent.clientX - startX;
-    const deltaY = moveEvent.clientY - startY;
+    const deltaX = (moveEvent.clientX - startX) / state.view.scale;
+    const deltaY = (moveEvent.clientY - startY) / state.view.scale;
     const newX = initialX + deltaX;
     const newY = initialY + deltaY;
 
@@ -852,8 +872,8 @@ function updateDraggingLinkPath(event) {
 
   const { startX, startY, pathElement } = state.draggingLink;
   const canvasRect = elements.canvas.getBoundingClientRect();
-  const endX = event.clientX - canvasRect.left;
-  const endY = event.clientY - canvasRect.top;
+  const endX = (event.clientX - canvasRect.left) / state.view.scale;
+  const endY = (event.clientY - canvasRect.top) / state.view.scale;
   const offset = Math.max(40, Math.abs(endX - startX) / 2);
   const curve = `M ${startX} ${startY} C ${startX + offset} ${startY} ${endX - offset} ${endY} ${endX} ${endY}`;
   pathElement.setAttribute("d", curve);
@@ -882,9 +902,102 @@ function getConnectorCoordinates(connectorElement) {
   const rect = connectorElement.getBoundingClientRect();
   const canvasRect = elements.canvas.getBoundingClientRect();
   return {
-    x: rect.left + rect.width / 2 - canvasRect.left,
-    y: rect.top + rect.height / 2 - canvasRect.top,
+    x: (rect.left + rect.width / 2 - canvasRect.left) / state.view.scale,
+    y: (rect.top + rect.height / 2 - canvasRect.top) / state.view.scale,
   };
+}
+
+// --- Zoom & Pan Logic ---
+
+function togglePanMode() {
+  state.panMode = !state.panMode;
+  elements.panMode.classList.toggle("active", state.panMode);
+  elements.canvasWrapper.classList.toggle("pan-active", state.panMode);
+
+  // Disable link mode if pan mode is active
+  if (state.panMode && state.linkMode) {
+    toggleLinkMode();
+  }
+}
+
+function handleWheel(event) {
+  if (event.ctrlKey || event.metaKey) {
+    // Browser zoom, let it happen or prevent? Usually we want to prevent and handle internal zoom
+    event.preventDefault();
+  } else {
+    // If not explicitly zooming, maybe we just scroll? 
+    // But user asked for "zoomer en scrollant", so let's map wheel to zoom directly or with modifier.
+    // Standard UX: Wheel = Pan (vertical), Shift+Wheel = Pan (horizontal), Ctrl/Cmd+Wheel = Zoom.
+    // OR: Wheel = Zoom directly (like maps).
+    // Let's implement Wheel = Zoom for simplicity as requested "zoomer en scrollant".
+    event.preventDefault();
+  }
+
+  const zoomSensitivity = 0.001;
+  const delta = -event.deltaY * zoomSensitivity;
+  const newScale = Math.min(Math.max(0.1, state.view.scale + delta), 5);
+
+  // Zoom towards pointer
+  const rect = elements.canvasWrapper.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  // Calculate new offset to keep pointer stationary in world space
+  // WorldX = (ScreenX - OffsetX) / Scale
+  const worldX = (x - state.view.x) / state.view.scale;
+  const worldY = (y - state.view.y) / state.view.scale;
+
+  state.view.x = x - worldX * newScale;
+  state.view.y = y - worldY * newScale;
+  state.view.scale = newScale;
+
+  updateTransform();
+}
+
+let panStart = { x: 0, y: 0 };
+let viewStart = { x: 0, y: 0 };
+
+function handlePanStart(event) {
+  // Only pan if in pan mode OR middle mouse button
+  if (!state.panMode && event.button !== 1) return;
+
+  event.preventDefault();
+  state.isPanning = true;
+  panStart = { x: event.clientX, y: event.clientY };
+  viewStart = { x: state.view.x, y: state.view.y };
+
+  elements.canvasWrapper.setPointerCapture(event.pointerId);
+  elements.canvasWrapper.style.cursor = "grabbing";
+}
+
+function handlePanMove(event) {
+  if (!state.isPanning) return;
+
+  const dx = event.clientX - panStart.x;
+  const dy = event.clientY - panStart.y;
+
+  state.view.x = viewStart.x + dx;
+  state.view.y = viewStart.y + dy;
+
+  updateTransform();
+}
+
+function handlePanEnd(event) {
+  if (!state.isPanning) return;
+
+  state.isPanning = false;
+  elements.canvasWrapper.style.cursor = state.panMode ? "grab" : "default";
+  // Don't release capture immediately if we want to prevent click events on children?
+  // But we handle click on wrapper to clear selection, so it's fine.
+}
+
+function updateTransform() {
+  elements.transformLayer.style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`;
+
+  // Update background size/position to create parallax or grid effect?
+  // For simple grid, we can adjust background-position of wrapper
+  elements.canvasWrapper.style.backgroundPosition = `${state.view.x}px ${state.view.y}px`;
+  elements.canvasWrapper.style.backgroundSize = `${20 * state.view.scale}px ${20 * state.view.scale}px`;
 }
 
 // --- Local Storage Logic ---

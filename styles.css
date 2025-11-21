@@ -487,6 +487,18 @@ textarea[readonly] {
   flex: 1;
   position: relative;
   overflow: hidden;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.transform-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 #canvas,
@@ -495,6 +507,33 @@ textarea[readonly] {
   inset: 0;
   width: 100%;
   height: 100%;
+  /* Ensure pointer events pass through where appropriate */
+}
+
+#connections {
+  pointer-events: none;
+  /* Let clicks pass through to canvas/nodes */
+  z-index: 0;
+}
+
+#canvas {
+  pointer-events: none;
+  /* Let clicks pass through to nodes */
+  z-index: 1;
+}
+
+.node {
+  pointer-events: auto;
+  /* Re-enable pointer events for nodes */
+}
+
+/* Pan Mode Cursor */
+.pan-active {
+  cursor: grab;
+}
+
+.pan-active:active {
+  cursor: grabbing;
 }
 
 /* Nodes */

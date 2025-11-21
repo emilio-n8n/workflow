@@ -144,13 +144,21 @@
             </svg>
             Lier
           </button>
+          <button id="pan-mode" class="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3-3M2 12h20M12 2v20" />
+            </svg>
+            Se déplacer
+          </button>
         </div>
         <div id="link-hint" class="hint"></div>
       </div>
 
-      <div class="canvas-wrapper">
-        <svg id="connections"></svg>
-        <div id="canvas"></div>
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <div id="transform-layer" class="transform-layer">
+          <svg id="connections"></svg>
+          <div id="canvas"></div>
+        </div>
       </div>
     </main>
 
