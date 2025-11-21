@@ -173,6 +173,9 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  resize: vertical;
+  /* Allow user to resize height */
+  position: relative;
 }
 
 .ai-content {
