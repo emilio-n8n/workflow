@@ -8,6 +8,8 @@ const state = {
   pendingLinkFrom: null,
   draggingLink: null,
   apiKey: localStorage.getItem("gemini_api_key") || "",
+  conversationHistory: [], // Stores all messages for context
+  flowModificationHistory: [], // Tracks chronological flow changes
 };
 
 const elements = {
@@ -35,6 +37,7 @@ const elements = {
   aiChatContainer: document.getElementById("ai-chat-container"),
   aiAnalyzeBtn: document.getElementById("ai-analyze-btn"),
   aiSuggestBtn: document.getElementById("ai-suggest-btn"),
+  aiClearChatBtn: document.getElementById("ai-clear-chat-btn"),
 };
 
 const nodeElements = new Map();
@@ -156,6 +159,8 @@ function attachEventListeners() {
     const prompt = "Suggère 3 étapes supplémentaires logiques pour ce flux. Réponds sous forme de liste.";
     callGemini(prompt, true);
   });
+
+  elements.aiClearChatBtn.addEventListener("click", clearConversation);
 }
 
 // --- AI Logic ---
@@ -179,6 +184,13 @@ async function callGemini(userPrompt, includeContext = false) {
     return;
   }
 
+  // Add user message to history
+  state.conversationHistory.push({
+    role: "user",
+    text: userPrompt,
+    timestamp: new Date().toISOString()
+  });
+
   addChatMessage("ai", "Réflexion en cours...");
   const loadingMsg = elements.aiChatContainer.lastElementChild;
 
@@ -201,14 +213,29 @@ async function callGemini(userPrompt, includeContext = false) {
       2. Si l'utilisateur demande une ANALYSE ou des CONSEILS, réponds en texte clair, concis et professionnel.
       
       3. Contexte actuel du graphe : ${currentJson}
+      
+      4. IMPORTANT : Tu as accès à l'historique complet de la conversation. Utilise-le pour :
+         - Te souvenir de ce qui a été dit précédemment
+         - Maintenir la cohérence dans tes réponses
+         - Référencer les modifications de flux précédentes
+         - Répondre aux questions sur "ce qui a été fait avant"
+      
+      5. Historique des modifications de flux : ${JSON.stringify(state.flowModificationHistory)}
     `;
+
+    // Build conversation context with history
+    const conversationContext = state.conversationHistory.map(msg => {
+      return `${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.text}`;
+    }).join('\n\n');
+
+    const fullPrompt = systemInstruction + "\n\n=== HISTORIQUE DE CONVERSATION ===\n" + conversationContext;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${state.apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: systemInstruction + "\n\nUtilisateur: " + userPrompt }]
+          parts: [{ text: fullPrompt }]
         }]
       })
     });
@@ -232,6 +259,13 @@ async function callGemini(userPrompt, includeContext = false) {
       throw new Error("Réponse vide de l'IA. Veuillez réessayer.");
     }
 
+    // Add AI response to history
+    state.conversationHistory.push({
+      role: "assistant",
+      text: aiText,
+      timestamp: new Date().toISOString()
+    });
+
     loadingMsg.remove();
 
     // Try to parse JSON
@@ -252,6 +286,16 @@ async function callGemini(userPrompt, includeContext = false) {
 
       if (validateImportData(jsonResponse)) {
         loadState(jsonResponse);
+
+        // Track flow modification
+        state.flowModificationHistory.push({
+          timestamp: new Date().toISOString(),
+          action: "AI generated flow",
+          userPrompt: userPrompt,
+          nodesCount: jsonResponse.nodes.length,
+          edgesCount: jsonResponse.edges.length
+        });
+
         addChatMessage("ai", "✅ Flux généré avec succès ! Vous pouvez maintenant le modifier.");
       } else {
         console.error("Invalid JSON structure:", jsonResponse);
@@ -275,6 +319,17 @@ function addChatMessage(type, text) {
   div.textContent = text;
   elements.aiChatContainer.appendChild(div);
   elements.aiChatContainer.scrollTop = elements.aiChatContainer.scrollHeight;
+}
+
+function clearConversation() {
+  // Reset conversation history
+  state.conversationHistory = [];
+
+  // Clear chat UI
+  elements.aiChatContainer.innerHTML = '';
+
+  // Add welcome message
+  addChatMessage("system", "Conversation réinitialisée. Comment puis-je vous aider ?");
 }
 
 // --- Core Logic (Existing + Adapted) ---
@@ -303,6 +358,15 @@ function addNode() {
   nodeElements.set(node.id, element);
   elements.canvas.appendChild(element);
   selectNode(node.id);
+
+  // Track modification
+  state.flowModificationHistory.push({
+    timestamp: new Date().toISOString(),
+    action: "Node added",
+    nodeTitle: node.title,
+    nodeId: node.id
+  });
+
   updateJSONPreview();
 }
 
@@ -337,6 +401,13 @@ function removeNode(nodeId) {
   if (state.selectedNodeId === nodeId) {
     selectNode(null);
   }
+
+  // Track modification
+  state.flowModificationHistory.push({
+    timestamp: new Date().toISOString(),
+    action: "Node removed",
+    nodeId: nodeId
+  });
 
   clearPendingLink();
   updateConnections();
@@ -493,6 +564,14 @@ function createEdge(fromId, toId) {
   path.dataset.edgeId = edgeId;
   edgesGroup.appendChild(path);
   edgeElements.set(edgeId, path);
+
+  // Track modification
+  state.flowModificationHistory.push({
+    timestamp: new Date().toISOString(),
+    action: "Edge created",
+    from: fromId,
+    to: toId
+  });
 
   updateConnections();
   updateJSONPreview();
