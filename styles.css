@@ -170,6 +170,17 @@ body {
   min-height: 300px;
   background: linear-gradient(180deg, rgba(99, 102, 241, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
   border: 1px solid rgba(99, 102, 241, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 10px;
 }
 
 .chat-container {
@@ -178,9 +189,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 8px 0;
+  padding: 8px 4px;
+  /* Added horizontal padding for scrollbar space */
   font-size: 0.9rem;
-  max-height: 300px;
+  /* Removed max-height to allow flex to handle sizing */
 }
 
 .chat-message {
