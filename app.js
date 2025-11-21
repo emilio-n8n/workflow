@@ -38,6 +38,10 @@ const elements = {
   aiAnalyzeBtn: document.getElementById("ai-analyze-btn"),
   aiSuggestBtn: document.getElementById("ai-suggest-btn"),
   aiClearChatBtn: document.getElementById("ai-clear-chat-btn"),
+  // Local Storage Elements
+  saveNameInput: document.getElementById("save-name"),
+  saveLocalBtn: document.getElementById("save-local"),
+  savedFlowsList: document.getElementById("saved-flows-list"),
 };
 
 const nodeElements = new Map();
@@ -54,6 +58,7 @@ updateJSONPreview();
 if (state.apiKey) {
   elements.apiKeyInput.value = state.apiKey;
 }
+updateSavedFlowsList();
 
 function setupSvg() {
   const defs = document.createElementNS(svgNS, "defs");
@@ -161,6 +166,12 @@ function attachEventListeners() {
   });
 
   elements.aiClearChatBtn.addEventListener("click", clearConversation);
+
+  // Local Storage Listeners
+  elements.saveLocalBtn.addEventListener("click", saveFlowToLocal);
+  elements.saveNameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveFlowToLocal();
+  });
 }
 
 // --- AI Logic ---
@@ -874,4 +885,122 @@ function getConnectorCoordinates(connectorElement) {
     x: rect.left + rect.width / 2 - canvasRect.left,
     y: rect.top + rect.height / 2 - canvasRect.top,
   };
+}
+
+// --- Local Storage Logic ---
+
+function saveFlowToLocal() {
+  const name = elements.saveNameInput.value.trim();
+  if (!name) {
+    alert("Veuillez donner un nom à votre flux.");
+    return;
+  }
+
+  const flowData = {
+    nodes: state.nodes,
+    edges: state.edges,
+    timestamp: new Date().toISOString(),
+    name: name
+  };
+
+  const savedFlows = getSavedFlows();
+  // Update if exists or add new
+  const existingIndex = savedFlows.findIndex(f => f.name === name);
+  if (existingIndex >= 0) {
+    if (!confirm(`Un flux nommé "${name}" existe déjà. Voulez-vous l'écraser ?`)) return;
+    savedFlows[existingIndex] = flowData;
+  } else {
+    savedFlows.push(flowData);
+  }
+
+  localStorage.setItem("flowgenius_saved_flows", JSON.stringify(savedFlows));
+  elements.saveNameInput.value = "";
+  updateSavedFlowsList();
+
+  // Add to history
+  state.flowModificationHistory.push({
+    timestamp: new Date().toISOString(),
+    action: "Flow saved locally",
+    flowName: name
+  });
+}
+
+function getSavedFlows() {
+  try {
+    const stored = localStorage.getItem("flowgenius_saved_flows");
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    console.error("Error reading local storage", e);
+    return [];
+  }
+}
+
+function loadFlowFromLocal(name) {
+  const savedFlows = getSavedFlows();
+  const flow = savedFlows.find(f => f.name === name);
+
+  if (flow) {
+    if (state.nodes.length > 0 && !confirm("Charger ce flux remplacera votre travail actuel. Continuer ?")) {
+      return;
+    }
+
+    loadState(flow);
+
+    // Add to history
+    state.flowModificationHistory.push({
+      timestamp: new Date().toISOString(),
+      action: "Flow loaded locally",
+      flowName: name
+    });
+
+    addChatMessage("system", `Flux "${name}" chargé avec succès.`);
+  }
+}
+
+function deleteLocalFlow(name) {
+  if (!confirm(`Êtes-vous sûr de vouloir supprimer le flux "${name}" ?`)) return;
+
+  const savedFlows = getSavedFlows();
+  const newFlows = savedFlows.filter(f => f.name !== name);
+  localStorage.setItem("flowgenius_saved_flows", JSON.stringify(newFlows));
+  updateSavedFlowsList();
+}
+
+function updateSavedFlowsList() {
+  const flows = getSavedFlows();
+  const container = elements.savedFlowsList;
+  container.innerHTML = "";
+
+  if (flows.length === 0) {
+    container.innerHTML = '<div class="empty-state">Aucun flux sauvegardé</div>';
+    return;
+  }
+
+  // Sort by date desc
+  flows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  flows.forEach(flow => {
+    const item = document.createElement("div");
+    item.className = "saved-flow-item";
+
+    const date = new Date(flow.timestamp).toLocaleDateString() + " " + new Date(flow.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    item.innerHTML = `
+      <div class="flow-info">
+        <span class="flow-name">${flow.name}</span>
+        <span class="flow-date">${date}</span>
+      </div>
+      <button class="delete-flow" title="Supprimer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      </button>
+    `;
+
+    item.querySelector(".flow-info").addEventListener("click", () => loadFlowFromLocal(flow.name));
+    item.querySelector(".delete-flow").addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteLocalFlow(flow.name);
+    });
+
+    container.appendChild(item);
+  });
 }
